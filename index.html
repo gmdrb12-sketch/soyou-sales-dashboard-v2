@@ -1116,7 +1116,7 @@ const TABS = {
 };
 const COLORS = ['#e8192c','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#f97316','#38bdf8'];
 
-let allData=[], filtered=[], comparisonData=[];
+let allData=[], filtered=[], modeComparisonData=[];
 let filters={ biz:'all', status:'all' };
 let sortCol=null, sortDir=1;
 let baseDate=new Date();
@@ -1328,17 +1328,22 @@ const rangeEnd   = reEl&&reEl.value ? new Date(reEl.value+'T23:59:59') : null;
   // 기준일 월 (기간 미설정시 기준일 해당 월 기준)
   const baseMonth = baseDate.getFullYear()*100 + baseDate.getMonth();
 
-  comparisonData=allData.filter(r=>{
+  // 대면·비대면 분석 전용: 화면 날짜/상태 필터와 완전히 분리
+  modeComparisonData=allData.filter(r=>{
     if(filters.biz!=='all'&&r._biz!==filters.biz) return false;
     if(writer!=='all'&&getWriter(r)!==writer) return false;
     if(inflow!=='all'&&(r['유입경로']||'')!==inflow) return false;
     if(search){const h=((r['거래처명']||'')+(r['품목명(요약)']||'')+(r['견적명']||'')).toLowerCase();if(!h.includes(search))return false;}
-
     return true;
   });
-  filtered=comparisonData.filter(r=>{
+
+  // 기존 견적 현황·목록: 원래 필터 방식 그대로 유지
+  filtered=allData.filter(r=>{
+    if(filters.biz!=='all'&&r._biz!==filters.biz) return false;
     if(filters.status!=='all'&&r._status!==filters.status) return false;
-    // 일반 현황에만 화면의 기간 필터 적용 (대면 비교는 CSV 집계기간 전체 사용)
+    if(writer!=='all'&&getWriter(r)!==writer) return false;
+    if(inflow!=='all'&&(r['유입경로']||'')!==inflow) return false;
+    if(search){const h=((r['거래처명']||'')+(r['품목명(요약)']||'')+(r['견적명']||'')).toLowerCase();if(!h.includes(search))return false;}
     if((rangeStart||rangeEnd) && r._status !== 'pending'){
       const d=parseDate((r['일자-No.']||'').split(' ')[0]);
       if(!d) return false;
@@ -1445,8 +1450,8 @@ function getMonthlyModeStats(data) {
 function renderModeCompare() {
   const el=document.getElementById('modeCompareGrid');
   if(!el) return;
-  const face=getModeStats(comparisonData,'face');
-  const remote=getModeStats(comparisonData,'remote');
+  const face=getModeStats(modeComparisonData,'face');
+  const remote=getModeStats(modeComparisonData,'remote');
   const card=(mode,label,icon,d)=>`<div class="mode-card ${mode}" onclick="openModeModal('${mode}','all')">
     <div class="mode-card-head"><div class="mode-card-title">${icon} ${label}</div><div class="mode-card-open">상세보기 →</div></div>
     <div class="mode-rate-row">
@@ -1457,9 +1462,9 @@ function renderModeCompare() {
   </div>`;
   el.innerHTML=card('face','대면 영업','🤝',face)+card('remote','비대면 영업','📞',remote);
 
-  const unknown=comparisonData.filter(r=>getSalesMode(r)==='unknown').length;
+  const unknown=modeComparisonData.filter(r=>getSalesMode(r)==='unknown').length;
   const note=document.getElementById('modeCompareNote');
-  const period=getSourcePeriod(comparisonData);
+  const period=getSourcePeriod(modeComparisonData);
   if(note) note.innerHTML=`업로드 파일 집계기간 <strong>${period.label}</strong> · 성공률·실패율은 결과 확정 견적(성공+실패) 기준입니다.${unknown?` <strong style="color:var(--yellow)">대면 여부 미분류 ${unknown}건</strong>`:''}`;
 }
 
@@ -1477,8 +1482,8 @@ function openModeQuote(idx){closeModeModal();openModalByRow(idx);}
 function safeText(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 function renderModeModal(){
-  const face=getModeStats(comparisonData,'face'), remote=getModeStats(comparisonData,'remote');
-  const period=getSourcePeriod(comparisonData);
+  const face=getModeStats(modeComparisonData,'face'), remote=getModeStats(modeComparisonData,'remote');
+  const period=getSourcePeriod(modeComparisonData);
   const diff=face.successRate-remote.successRate;
   const insight=document.getElementById('modeComparisonInsight');
   if(!face.closed&&!remote.closed){
@@ -1500,7 +1505,7 @@ function renderModeModal(){
     <div class="mode-modal-stat${active('remote','fail')}" onclick="selectModeDetail('remote','fail')"><div class="mode-modal-stat-label">비대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${remote.failRate}%</div><div class="mode-rate-sub">${remote.fail.length}/${remote.closed}건</div></div>`;
 
   document.getElementById('modePeriodLabel').textContent=`업로드 파일 기준 ${period.label}`;
-  const monthly=getMonthlyModeStats(comparisonData);
+  const monthly=getMonthlyModeStats(modeComparisonData);
   const monthBtn=(m,mode,status,n)=>{
     const on=selectedModeDetail.month===m&&selectedModeDetail.mode===mode&&selectedModeDetail.status===status?' active':'';
     return `<button class="month-count-btn ${status}${n?'':' zero'}${on}" onclick="selectModeMonthDetail('${m}','${mode}','${status}')">${n}건</button>`;
