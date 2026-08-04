@@ -605,10 +605,57 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
 .insight-summary-item { font-size: 13px; color: var(--text2); margin-bottom: 5px; display: flex; align-items: flex-start; gap: 6px; line-height: 1.5; }
 .insight-summary-item::before { content: '→'; color: var(--red); flex-shrink: 0; margin-top: 1px; }
 
+/* 대면 vs 비대면 */
+.mode-compare-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.mode-card {
+  background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+  padding:16px 18px; cursor:pointer; transition:all .18s; position:relative; overflow:hidden;
+}
+.mode-card:hover { transform:translateY(-2px); border-color:var(--border2); box-shadow:var(--shadow); }
+.mode-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; }
+.mode-card.face::before { background:var(--blue); }
+.mode-card.remote::before { background:var(--purple); }
+.mode-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:13px; }
+.mode-card-title { font-size:14px; font-weight:800; }
+.mode-card-open { color:var(--muted); font-size:11px; }
+.mode-rate-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.mode-rate-box { background:var(--surface); border:1px solid var(--divider); border-radius:8px; padding:11px 12px; }
+.mode-rate-label { font-size:10px; font-weight:700; color:var(--muted); margin-bottom:4px; }
+.mode-rate-value { font-size:25px; line-height:1; font-weight:850; letter-spacing:-1px; }
+.mode-rate-value.success { color:var(--green); }
+.mode-rate-value.fail { color:var(--red); }
+.mode-rate-sub { margin-top:5px; font-size:10px; color:var(--muted); }
+.mode-card-foot { display:flex; justify-content:space-between; margin-top:11px; font-size:11px; color:var(--text2); }
+.mode-card-foot strong { color:var(--text); }
+.mode-compare-note { margin-top:10px; font-size:11px; color:var(--muted); line-height:1.5; }
+.mode-modal-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+.mode-modal-stat { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:13px; cursor:pointer; transition:.15s; }
+.mode-modal-stat:hover, .mode-modal-stat.active { border-color:var(--red); background:var(--red-dim); }
+.mode-modal-stat-label { font-size:10px; font-weight:700; color:var(--muted); }
+.mode-modal-stat-value { font-size:22px; font-weight:850; margin-top:4px; }
+.mode-detail-head { display:flex; align-items:center; justify-content:space-between; margin:12px 0 8px; }
+.mode-detail-title { font-size:13px; font-weight:800; }
+.mode-detail-count { font-size:11px; color:var(--muted); }
+.mode-detail-list { border:1px solid var(--border); border-radius:9px; overflow:hidden; max-height:330px; overflow-y:auto; }
+.mode-detail-item { display:grid; grid-template-columns:105px 1fr 110px 90px; gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--divider); cursor:pointer; }
+.mode-detail-item:last-child { border-bottom:0; }
+.mode-detail-item:hover { background:var(--surface2); }
+.mode-detail-no { font-size:11px; color:var(--muted); }
+.mode-detail-company { font-size:12px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mode-detail-writer { font-size:11px; color:var(--text2); }
+.mode-detail-amount { font-size:11px; font-weight:700; text-align:right; }
+.mode-empty { padding:28px; text-align:center; color:var(--muted); }
+.mode-comparison-insight { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:12px 14px; margin-bottom:14px; color:var(--text2); line-height:1.6; }
+.mode-comparison-insight strong { color:var(--text); }
+
 @media (max-width: 768px) {
   .big-modal { padding: 20px 16px; }
   .trend-summary { grid-template-columns: 1fr 1fr; }
   .insight-grid { grid-template-columns: 1fr; }
+  .mode-compare-grid { grid-template-columns:1fr; }
+  .mode-modal-summary { grid-template-columns:1fr 1fr; }
+  .mode-detail-item { grid-template-columns:90px 1fr 80px; }
+  .mode-detail-writer { display:none; }
   .pdf-section { flex-direction: column; gap: 10px; align-items: flex-start; }
   .hdr-action-btn { font-size: 11px; padding: 4px 8px; }
 }
@@ -780,6 +827,7 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
     <div style="display:flex;gap:6px;">
       <button class="hdr-action-btn" onclick="openTrendModal()">📊 월별 추이</button>
       <button class="hdr-action-btn" onclick="openInsightModal()">💡 인사이트</button>
+      <button class="hdr-action-btn" onclick="openModeModal()">🤝 대면 비교</button>
     </div>
     <div class="theme-toggle">
       <button class="theme-btn active" id="btnDark" onclick="setTheme('dark')">🌙 다크</button>
@@ -871,7 +919,14 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
 
     </div><!-- /sticky-top -->
 
-    <!-- 3. 긴급 알림 -->
+    <!-- 3. 대면·비대면 성과 비교 -->
+    <div class="report-section">
+      <div class="section-label">대면·비대면 영업 성과 비교</div>
+      <div class="mode-compare-grid" id="modeCompareGrid"></div>
+      <div class="mode-compare-note" id="modeCompareNote">성공률·실패율은 수주 결과가 확정된 견적(성공+실패) 기준입니다. 카드를 누르면 상세 견적을 볼 수 있습니다.</div>
+    </div>
+
+    <!-- 4. 긴급 알림 -->
     <div class="report-section">
       <div class="section-label">
         지금 챙겨야 할 건
@@ -1010,6 +1065,21 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
   </div>
 </div>
 
+<!-- 대면·비대면 상세 모달 -->
+<div class="big-overlay" id="modeOverlay" onclick="closeModeOutside(event)">
+  <div class="big-modal">
+    <button class="big-modal-x" onclick="closeModeModal()">✕</button>
+    <div class="big-modal-title">🤝 대면·비대면 성과 비교</div>
+    <div class="mode-comparison-insight" id="modeComparisonInsight"></div>
+    <div class="mode-modal-summary" id="modeModalSummary"></div>
+    <div class="mode-detail-head">
+      <div class="mode-detail-title" id="modeDetailTitle">상세 견적</div>
+      <div class="mode-detail-count" id="modeDetailCount"></div>
+    </div>
+    <div class="mode-detail-list" id="modeDetailList"></div>
+  </div>
+</div>
+
 <script>
 const SHEET_ID = '1txgYztWESmoLcLWIv36dEIFX0xAe3RnpGln8zYcRtCM';
 const TABS = {
@@ -1022,7 +1092,7 @@ const TABS = {
 };
 const COLORS = ['#e8192c','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#f97316','#38bdf8'];
 
-let allData=[], filtered=[];
+let allData=[], filtered=[], comparisonData=[];
 let filters={ biz:'all', status:'all' };
 let sortCol=null, sortDir=1;
 let baseDate=new Date();
@@ -1152,18 +1222,26 @@ function parseCSV(text, tabName) {
   const raw=text.split('\n'); const lines=[]; let cur='',inQ=false;
   for(const l of raw){ for(const c of l){if(c==='"')inQ=!inQ;} cur+=(cur?'\n':'')+l; if(!inQ){lines.push(cur);cur='';} }
   if(cur) lines.push(cur);
-  const meta=TABS[tabName]; const rows=[];
-  // 현재 시트 컬럼 구조 (법인/개인 공통, 총 21열):
-  // 0 일자-No. / 1 사업자등록번호 / 2 거래처명 / 3 유입경로 / 4 고객명 / 5 고객연락처 /
-  // 6 거래처담당자 / 7 작성자 / 8 견적명 / 9 품목명(요약) / 10 수량합계 / 11 금액합계(VAT포함) /
-  // 12 진행상태 / 13 수주예상일 / 14 대면영업여부 / 15 지역 / 16 견적결과(보고) / 17 첨부 /
-  // 18 인쇄 / 19 최종수정일시 / 20 마지막수정자
+  const meta=TABS[tabName]; const rows=[]; const seen=new Set();
+  const parsedLines=lines.map(csvLine);
+  const header=parsedLines.find(v=>v.some(x=>cl(x)==='일자-No.'));
+  if(!header) return rows;
+  const headers=header.map(cl);
+  const required=['일자-No.','거래처명','금액합계(VAT포함)','진행상태'];
+  if(required.some(h=>!headers.includes(h))) return rows;
+
   for(const line of lines){
-    const v=csvLine(line); if(!v||v.length<10) continue;
-    const d=cl(v[0]), co=cl(v[2]);
+    const v=csvLine(line); if(!v||v===header) continue;
+    const obj={}; headers.forEach((h,i)=>{if(h)obj[h]=cl(v[i]);});
+    const d=obj['일자-No.']||'', co=obj['거래처명']||'';
     if(!d.match(/^\d{4}\/\d{2}\/\d{2}/)&&!d.match(/^\d{2}-\d{2}-\d{2}/)) continue;
     if(!co) continue;
-    rows.push({'일자-No.':d,'거래처명':co,'유입경로':cl(v[3]),'고객명':cl(v[4]),'고객연락처':cl(v[5]),'거래처담당자':cl(v[6]),'작성자':cl(v[7]),'견적명':cl(v[8]),'품목명(요약)':cl(v[9]),'금액합계(VAT포함)':cl(v[11]).replace(/[^0-9]/g,''),'진행상태':cl(v[12]),'수주예상일':cl(v[13]),'지역':cl(v[15]),'견적결과(보고)':cl(v[16]),'최종수정일시':cl(v[19]),'마지막수정자':cl(v[20]),_biz:meta.biz,_period:meta.period,_status:meta.status,_tab:tabName});
+    const fullRowKey=JSON.stringify(headers.map((h,i)=>cl(v[i])));
+    if(seen.has(fullRowKey)) continue;
+    seen.add(fullRowKey);
+    obj['금액합계(VAT포함)']=(obj['금액합계(VAT포함)']||'').replace(/[^0-9]/g,'');
+    obj._biz=meta.biz; obj._period=meta.period; obj._status=meta.status; obj._tab=tabName;
+    rows.push(obj);
   }
   return rows;
 }
@@ -1222,9 +1300,8 @@ const rangeEnd   = reEl&&reEl.value ? new Date(reEl.value+'T23:59:59') : null;
   // 기준일 월 (기간 미설정시 기준일 해당 월 기준)
   const baseMonth = baseDate.getFullYear()*100 + baseDate.getMonth();
 
-  filtered=allData.filter(r=>{
+  comparisonData=allData.filter(r=>{
     if(filters.biz!=='all'&&r._biz!==filters.biz) return false;
-    if(filters.status!=='all'&&r._status!==filters.status) return false;
     if(writer!=='all'&&getWriter(r)!==writer) return false;
     if(inflow!=='all'&&(r['유입경로']||'')!==inflow) return false;
     if(search){const h=((r['거래처명']||'')+(r['품목명(요약)']||'')+(r['견적명']||'')).toLowerCase();if(!h.includes(search))return false;}
@@ -1238,6 +1315,7 @@ const rangeEnd   = reEl&&reEl.value ? new Date(reEl.value+'T23:59:59') : null;
     }
     return true;
   });
+  filtered=comparisonData.filter(r=>filters.status==='all'||r._status===filters.status);
 
   // KPI 섹션 라벨 업데이트
   const lbl = document.getElementById('kpiSectionLabel');
@@ -1252,7 +1330,7 @@ const rangeEnd   = reEl&&reEl.value ? new Date(reEl.value+'T23:59:59') : null;
     }
   }
 
-  renderKPI(); renderUrgent(); renderWriter(); renderEquip(); renderInflow(); renderTable();
+  renderKPI(); renderModeCompare(); renderUrgent(); renderWriter(); renderEquip(); renderInflow(); renderTable();
 }
 
 function clearRange(){
@@ -1277,6 +1355,94 @@ function renderKPI(){
   document.getElementById('kF-cnt').innerHTML=f.length+'<span class="kpi-unit">건</span>';
   document.getElementById('kF-amt').textContent=fmtAmt(sum(f));
   document.getElementById('kF-pct').textContent=pct(f.length);
+}
+
+// ── 대면·비대면 성과 비교 ──
+function getSalesMode(r) {
+  const raw=(r['대면영업여부']||'').trim().toLowerCase().replace(/\s/g,'');
+  if(['o','○','●','ㅇ','y','yes','대면'].includes(raw)) return 'face';
+  if(['x','×','n','no','비대면'].includes(raw)) return 'remote';
+  return 'unknown';
+}
+
+function getModeStats(data, mode) {
+  const items=data.filter(r=>getSalesMode(r)===mode);
+  const success=items.filter(r=>r._status==='success');
+  const fail=items.filter(r=>r._status==='fail');
+  const pending=items.filter(r=>r._status==='pending');
+  const closed=success.length+fail.length;
+  return {
+    items, success, fail, pending, closed,
+    successRate:closed?Math.round(success.length/closed*100):0,
+    failRate:closed?Math.round(fail.length/closed*100):0
+  };
+}
+
+function renderModeCompare() {
+  const el=document.getElementById('modeCompareGrid');
+  if(!el) return;
+  const face=getModeStats(comparisonData,'face');
+  const remote=getModeStats(comparisonData,'remote');
+  const card=(mode,label,icon,d)=>`<div class="mode-card ${mode}" onclick="openModeModal('${mode}','all')">
+    <div class="mode-card-head"><div class="mode-card-title">${icon} ${label}</div><div class="mode-card-open">상세보기 →</div></div>
+    <div class="mode-rate-row">
+      <div class="mode-rate-box"><div class="mode-rate-label">수주 성공률</div><div class="mode-rate-value success">${d.successRate}%</div><div class="mode-rate-sub">${d.success.length}/${d.closed}건</div></div>
+      <div class="mode-rate-box"><div class="mode-rate-label">수주 실패율</div><div class="mode-rate-value fail">${d.failRate}%</div><div class="mode-rate-sub">${d.fail.length}/${d.closed}건</div></div>
+    </div>
+    <div class="mode-card-foot"><span>결과 확정 <strong>${d.closed}건</strong></span><span>진행중 <strong>${d.pending.length}건</strong></span></div>
+  </div>`;
+  el.innerHTML=card('face','대면 영업','🤝',face)+card('remote','비대면 영업','📞',remote);
+
+  const unknown=comparisonData.filter(r=>getSalesMode(r)==='unknown').length;
+  const note=document.getElementById('modeCompareNote');
+  if(note) note.innerHTML=`성공률·실패율은 결과 확정 견적(성공+실패) 기준입니다. 카드를 누르면 상세 견적을 볼 수 있습니다.${unknown?` <strong style="color:var(--yellow)">대면 여부 미분류 ${unknown}건</strong>`:''}`;
+}
+
+let selectedModeDetail={mode:'face',status:'all'};
+function openModeModal(mode='face',status='all') {
+  selectedModeDetail={mode,status};
+  renderModeModal();
+  document.getElementById('modeOverlay').classList.add('on');
+}
+function closeModeModal(){document.getElementById('modeOverlay').classList.remove('on');}
+function closeModeOutside(e){if(e.target===document.getElementById('modeOverlay'))closeModeModal();}
+function selectModeDetail(mode,status){selectedModeDetail={mode,status};renderModeModal();}
+function openModeQuote(idx){closeModeModal();openModalByRow(idx);}
+function safeText(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function renderModeModal(){
+  const face=getModeStats(comparisonData,'face'), remote=getModeStats(comparisonData,'remote');
+  const diff=face.successRate-remote.successRate;
+  const insight=document.getElementById('modeComparisonInsight');
+  if(!face.closed&&!remote.closed){
+    insight.innerHTML='결과가 확정된 대면·비대면 견적이 아직 없습니다.';
+  }else if(!face.closed||!remote.closed){
+    insight.innerHTML='두 방식 중 한 쪽의 확정 데이터가 없어 성공률 차이를 비교할 수 없습니다.';
+  }else if(diff===0){
+    insight.innerHTML=`대면과 비대면 성공률이 모두 <strong>${face.successRate}%</strong>로 같습니다. 건수와 금액대별 차이를 함께 확인하세요.`;
+  }else{
+    const better=diff>0?'대면':'비대면', gap=Math.abs(diff);
+    insight.innerHTML=`현재 필터 기준 <strong>${better} 영업</strong>의 수주 성공률이 <strong>${gap}%p</strong> 높습니다. 단, 확정 건수(대면 ${face.closed}건·비대면 ${remote.closed}건)도 함께 봐야 합니다.`;
+  }
+
+  const active=(m,s)=>selectedModeDetail.mode===m&&selectedModeDetail.status===s?' active':'';
+  document.getElementById('modeModalSummary').innerHTML=`
+    <div class="mode-modal-stat${active('face','success')}" onclick="selectModeDetail('face','success')"><div class="mode-modal-stat-label">대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${face.successRate}%</div><div class="mode-rate-sub">${face.success.length}/${face.closed}건</div></div>
+    <div class="mode-modal-stat${active('face','fail')}" onclick="selectModeDetail('face','fail')"><div class="mode-modal-stat-label">대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${face.failRate}%</div><div class="mode-rate-sub">${face.fail.length}/${face.closed}건</div></div>
+    <div class="mode-modal-stat${active('remote','success')}" onclick="selectModeDetail('remote','success')"><div class="mode-modal-stat-label">비대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${remote.successRate}%</div><div class="mode-rate-sub">${remote.success.length}/${remote.closed}건</div></div>
+    <div class="mode-modal-stat${active('remote','fail')}" onclick="selectModeDetail('remote','fail')"><div class="mode-modal-stat-label">비대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${remote.failRate}%</div><div class="mode-rate-sub">${remote.fail.length}/${remote.closed}건</div></div>`;
+
+  const mode=selectedModeDetail.mode, status=selectedModeDetail.status;
+  const d=mode==='face'?face:remote;
+  const modeLabel=mode==='face'?'대면':'비대면';
+  let rows=status==='success'?d.success:status==='fail'?d.fail:d.items.filter(r=>r._status==='success'||r._status==='fail');
+  const statusLabel=status==='success'?'수주 성공':status==='fail'?'수주 실패':'결과 확정';
+  document.getElementById('modeDetailTitle').textContent=`${modeLabel} · ${statusLabel} 견적`;
+  document.getElementById('modeDetailCount').textContent=`${rows.length}건`;
+  document.getElementById('modeDetailList').innerHTML=rows.length?rows.map(r=>{
+    const idx=allData.indexOf(r);
+    return `<div class="mode-detail-item" onclick="openModeQuote(${idx})"><div class="mode-detail-no">${safeText(r['일자-No.'])}</div><div class="mode-detail-company">${safeText(r['거래처명'])}</div><div class="mode-detail-writer">${safeText(getWriter(r)||'미지정')}</div><div class="mode-detail-amount">${fmtAmt(+r['금액합계(VAT포함)']||0)}</div></div>`;
+  }).join(''):'<div class="mode-empty">해당하는 견적이 없습니다.</div>';
 }
 
 // ── Urgent ──
@@ -1831,4 +1997,3 @@ document.addEventListener('DOMContentLoaded',()=>{
 </script>
 </body>
 </html>
-
