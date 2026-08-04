@@ -633,6 +633,20 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
 .mode-modal-stat:hover, .mode-modal-stat.active { border-color:var(--red); background:var(--red-dim); }
 .mode-modal-stat-label { font-size:10px; font-weight:700; color:var(--muted); }
 .mode-modal-stat-value { font-size:22px; font-weight:850; margin-top:4px; }
+.mode-monthly-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin:16px 0 8px; }
+.mode-monthly-title { font-size:13px; font-weight:800; }
+.mode-period-label { font-size:11px; color:var(--muted); }
+.mode-monthly-wrap { border:1px solid var(--border); border-radius:9px; overflow:auto; margin-bottom:14px; }
+.mode-monthly-table { width:100%; min-width:610px; border-collapse:collapse; font-size:11px; }
+.mode-monthly-table th { padding:9px 8px; color:var(--muted); background:var(--surface2); border-bottom:1px solid var(--border); text-align:center; }
+.mode-monthly-table td { padding:7px 8px; border-bottom:1px solid var(--divider); text-align:center; }
+.mode-monthly-table tr:last-child td { border-bottom:0; }
+.mode-month-label { font-weight:750; color:var(--text); white-space:nowrap; }
+.month-count-btn { width:100%; border:0; border-radius:6px; padding:6px 5px; background:transparent; color:var(--text2); cursor:pointer; font:inherit; font-weight:750; }
+.month-count-btn:hover, .month-count-btn.active { background:var(--red-dim); outline:1px solid rgba(232,25,44,.25); }
+.month-count-btn.success { color:var(--green); }
+.month-count-btn.fail { color:var(--red); }
+.month-count-btn.zero { color:var(--muted); opacity:.55; }
 .mode-detail-head { display:flex; align-items:center; justify-content:space-between; margin:12px 0 8px; }
 .mode-detail-title { font-size:13px; font-weight:800; }
 .mode-detail-count { font-size:11px; color:var(--muted); }
@@ -1072,6 +1086,16 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
     <div class="big-modal-title">🤝 대면·비대면 성과 비교</div>
     <div class="mode-comparison-insight" id="modeComparisonInsight"></div>
     <div class="mode-modal-summary" id="modeModalSummary"></div>
+    <div class="mode-monthly-head">
+      <div class="mode-monthly-title">월별 성공·실패</div>
+      <div class="mode-period-label" id="modePeriodLabel"></div>
+    </div>
+    <div class="mode-monthly-wrap">
+      <table class="mode-monthly-table">
+        <thead><tr><th>월</th><th>대면 성공</th><th>대면 실패</th><th>비대면 성공</th><th>비대면 실패</th></tr></thead>
+        <tbody id="modeMonthlyBody"></tbody>
+      </table>
+    </div>
     <div class="mode-detail-head">
       <div class="mode-detail-title" id="modeDetailTitle">상세 견적</div>
       <div class="mode-detail-count" id="modeDetailCount"></div>
@@ -1223,6 +1247,9 @@ function parseCSV(text, tabName) {
   for(const l of raw){ for(const c of l){if(c==='"')inQ=!inQ;} cur+=(cur?'\n':'')+l; if(!inQ){lines.push(cur);cur='';} }
   if(cur) lines.push(cur);
   const meta=TABS[tabName]; const rows=[]; const seen=new Set();
+  const periodMatch=text.match(/(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})\s*~\s*(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})/);
+  const sourceStart=periodMatch?periodMatch[1].replace(/[.-]/g,'/'):'';
+  const sourceEnd=periodMatch?periodMatch[2].replace(/[.-]/g,'/'):'';
   const parsedLines=lines.map(csvLine);
   const header=parsedLines.find(v=>v.some(x=>cl(x)==='일자-No.'));
   if(!header) return rows;
@@ -1241,6 +1268,7 @@ function parseCSV(text, tabName) {
     seen.add(fullRowKey);
     obj['금액합계(VAT포함)']=(obj['금액합계(VAT포함)']||'').replace(/[^0-9]/g,'');
     obj._biz=meta.biz; obj._period=meta.period; obj._status=meta.status; obj._tab=tabName;
+    obj._sourceStart=sourceStart; obj._sourceEnd=sourceEnd;
     rows.push(obj);
   }
   return rows;
@@ -1306,7 +1334,11 @@ const rangeEnd   = reEl&&reEl.value ? new Date(reEl.value+'T23:59:59') : null;
     if(inflow!=='all'&&(r['유입경로']||'')!==inflow) return false;
     if(search){const h=((r['거래처명']||'')+(r['품목명(요약)']||'')+(r['견적명']||'')).toLowerCase();if(!h.includes(search))return false;}
 
-    // 기간 필터 적용 (진행중은 기간 무관 항상 포함)
+    return true;
+  });
+  filtered=comparisonData.filter(r=>{
+    if(filters.status!=='all'&&r._status!==filters.status) return false;
+    // 일반 현황에만 화면의 기간 필터 적용 (대면 비교는 CSV 집계기간 전체 사용)
     if((rangeStart||rangeEnd) && r._status !== 'pending'){
       const d=parseDate((r['일자-No.']||'').split(' ')[0]);
       if(!d) return false;
@@ -1315,7 +1347,6 @@ const rangeEnd   = reEl&&reEl.value ? new Date(reEl.value+'T23:59:59') : null;
     }
     return true;
   });
-  filtered=comparisonData.filter(r=>filters.status==='all'||r._status===filters.status);
 
   // KPI 섹션 라벨 업데이트
   const lbl = document.getElementById('kpiSectionLabel');
@@ -1378,6 +1409,39 @@ function getModeStats(data, mode) {
   };
 }
 
+function getSourcePeriod(data) {
+  const starts=data.map(r=>parseDate(r._sourceStart)).filter(Boolean);
+  const ends=data.map(r=>parseDate(r._sourceEnd)).filter(Boolean);
+  const quoteDates=data.map(r=>parseDate((r['일자-No.']||'').split(' ')[0])).filter(Boolean);
+  const start=starts.length?new Date(Math.min(...starts)):quoteDates.length?new Date(Math.min(...quoteDates)):null;
+  const end=ends.length?new Date(Math.max(...ends)):quoteDates.length?new Date(Math.max(...quoteDates)):null;
+  return {start,end,label:start&&end?`${fmt(start).replaceAll('-','.')} ~ ${fmt(end).replaceAll('-','.')}`:'집계기간 없음'};
+}
+
+function monthKeyOf(r) {
+  const d=parseDate((r['일자-No.']||'').split(' ')[0]);
+  return d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`:'';
+}
+
+function getMonthlyModeStats(data) {
+  const period=getSourcePeriod(data), keys=[];
+  if(period.start&&period.end){
+    let d=new Date(period.start.getFullYear(),period.start.getMonth(),1);
+    const last=new Date(period.end.getFullYear(),period.end.getMonth(),1);
+    while(d<=last&&keys.length<60){keys.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);d=new Date(d.getFullYear(),d.getMonth()+1,1);}
+  }
+  const map={};
+  keys.forEach(k=>map[k]={key:k,face:{success:0,fail:0},remote:{success:0,fail:0}});
+  data.forEach(r=>{
+    if(!['success','fail'].includes(r._status)) return;
+    const mode=getSalesMode(r), key=monthKeyOf(r);
+    if(!['face','remote'].includes(mode)||!key) return;
+    if(!map[key]) map[key]={key,face:{success:0,fail:0},remote:{success:0,fail:0}};
+    map[key][mode][r._status]++;
+  });
+  return Object.values(map).sort((a,b)=>a.key.localeCompare(b.key));
+}
+
 function renderModeCompare() {
   const el=document.getElementById('modeCompareGrid');
   if(!el) return;
@@ -1395,23 +1459,26 @@ function renderModeCompare() {
 
   const unknown=comparisonData.filter(r=>getSalesMode(r)==='unknown').length;
   const note=document.getElementById('modeCompareNote');
-  if(note) note.innerHTML=`성공률·실패율은 결과 확정 견적(성공+실패) 기준입니다. 카드를 누르면 상세 견적을 볼 수 있습니다.${unknown?` <strong style="color:var(--yellow)">대면 여부 미분류 ${unknown}건</strong>`:''}`;
+  const period=getSourcePeriod(comparisonData);
+  if(note) note.innerHTML=`업로드 파일 집계기간 <strong>${period.label}</strong> · 성공률·실패율은 결과 확정 견적(성공+실패) 기준입니다.${unknown?` <strong style="color:var(--yellow)">대면 여부 미분류 ${unknown}건</strong>`:''}`;
 }
 
-let selectedModeDetail={mode:'face',status:'all'};
+let selectedModeDetail={mode:'face',status:'all',month:null};
 function openModeModal(mode='face',status='all') {
-  selectedModeDetail={mode,status};
+  selectedModeDetail={mode,status,month:null};
   renderModeModal();
   document.getElementById('modeOverlay').classList.add('on');
 }
 function closeModeModal(){document.getElementById('modeOverlay').classList.remove('on');}
 function closeModeOutside(e){if(e.target===document.getElementById('modeOverlay'))closeModeModal();}
-function selectModeDetail(mode,status){selectedModeDetail={mode,status};renderModeModal();}
+function selectModeDetail(mode,status){selectedModeDetail={mode,status,month:null};renderModeModal();}
+function selectModeMonthDetail(month,mode,status){selectedModeDetail={mode,status,month};renderModeModal();}
 function openModeQuote(idx){closeModeModal();openModalByRow(idx);}
 function safeText(v){return String(v||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
 function renderModeModal(){
   const face=getModeStats(comparisonData,'face'), remote=getModeStats(comparisonData,'remote');
+  const period=getSourcePeriod(comparisonData);
   const diff=face.successRate-remote.successRate;
   const insight=document.getElementById('modeComparisonInsight');
   if(!face.closed&&!remote.closed){
@@ -1422,7 +1489,7 @@ function renderModeModal(){
     insight.innerHTML=`대면과 비대면 성공률이 모두 <strong>${face.successRate}%</strong>로 같습니다. 건수와 금액대별 차이를 함께 확인하세요.`;
   }else{
     const better=diff>0?'대면':'비대면', gap=Math.abs(diff);
-    insight.innerHTML=`현재 필터 기준 <strong>${better} 영업</strong>의 수주 성공률이 <strong>${gap}%p</strong> 높습니다. 단, 확정 건수(대면 ${face.closed}건·비대면 ${remote.closed}건)도 함께 봐야 합니다.`;
+    insight.innerHTML=`업로드 파일 집계기간 기준 <strong>${better} 영업</strong>의 수주 성공률이 <strong>${gap}%p</strong> 높습니다. 단, 확정 건수(대면 ${face.closed}건·비대면 ${remote.closed}건)도 함께 봐야 합니다.`;
   }
 
   const active=(m,s)=>selectedModeDetail.mode===m&&selectedModeDetail.status===s?' active':'';
@@ -1432,12 +1499,25 @@ function renderModeModal(){
     <div class="mode-modal-stat${active('remote','success')}" onclick="selectModeDetail('remote','success')"><div class="mode-modal-stat-label">비대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${remote.successRate}%</div><div class="mode-rate-sub">${remote.success.length}/${remote.closed}건</div></div>
     <div class="mode-modal-stat${active('remote','fail')}" onclick="selectModeDetail('remote','fail')"><div class="mode-modal-stat-label">비대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${remote.failRate}%</div><div class="mode-rate-sub">${remote.fail.length}/${remote.closed}건</div></div>`;
 
+  document.getElementById('modePeriodLabel').textContent=`업로드 파일 기준 ${period.label}`;
+  const monthly=getMonthlyModeStats(comparisonData);
+  const monthBtn=(m,mode,status,n)=>{
+    const on=selectedModeDetail.month===m&&selectedModeDetail.mode===mode&&selectedModeDetail.status===status?' active':'';
+    return `<button class="month-count-btn ${status}${n?'':' zero'}${on}" onclick="selectModeMonthDetail('${m}','${mode}','${status}')">${n}건</button>`;
+  };
+  document.getElementById('modeMonthlyBody').innerHTML=monthly.length?monthly.map(x=>{
+    const [y,m]=x.key.split('-');
+    return `<tr><td class="mode-month-label">${y}년 ${+m}월</td><td>${monthBtn(x.key,'face','success',x.face.success)}</td><td>${monthBtn(x.key,'face','fail',x.face.fail)}</td><td>${monthBtn(x.key,'remote','success',x.remote.success)}</td><td>${monthBtn(x.key,'remote','fail',x.remote.fail)}</td></tr>`;
+  }).join(''):'<tr><td colspan="5" class="mode-empty">월별로 집계할 견적이 없습니다.</td></tr>';
+
   const mode=selectedModeDetail.mode, status=selectedModeDetail.status;
   const d=mode==='face'?face:remote;
   const modeLabel=mode==='face'?'대면':'비대면';
   let rows=status==='success'?d.success:status==='fail'?d.fail:d.items.filter(r=>r._status==='success'||r._status==='fail');
+  if(selectedModeDetail.month) rows=rows.filter(r=>monthKeyOf(r)===selectedModeDetail.month);
   const statusLabel=status==='success'?'수주 성공':status==='fail'?'수주 실패':'결과 확정';
-  document.getElementById('modeDetailTitle').textContent=`${modeLabel} · ${statusLabel} 견적`;
+  const monthLabel=selectedModeDetail.month?`${selectedModeDetail.month.slice(0,4)}년 ${+selectedModeDetail.month.slice(5)}월 · `:'';
+  document.getElementById('modeDetailTitle').textContent=`${monthLabel}${modeLabel} · ${statusLabel} 견적`;
   document.getElementById('modeDetailCount').textContent=`${rows.length}건`;
   document.getElementById('modeDetailList').innerHTML=rows.length?rows.map(r=>{
     const idx=allData.indexOf(r);
