@@ -1236,10 +1236,66 @@ function getProdType(r) {
 }
 
 // ── Fetch ──
+function fetchGvizJsonp(sheetName, range, headers) {
+  return new Promise((resolve,reject)=>{
+    const callbackName=`soyuGviz_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script=document.createElement('script');
+    const timer=setTimeout(()=>finish(new Error(`${sheetName} 응답 시간 초과`)),15000);
+    function finish(error,data){
+      clearTimeout(timer);
+      try{delete window[callbackName];}catch(e){window[callbackName]=undefined;}
+      script.remove();
+      error?reject(error):resolve(data);
+    }
+    window[callbackName]=data=>{
+      if(!data||data.status==='error') finish(new Error(`${sheetName} 시트 응답 오류`));
+      else finish(null,data);
+    };
+    script.onerror=()=>finish(new Error(`${sheetName} 시트 연결 실패`));
+    script.src=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?sheet=${encodeURIComponent(sheetName)}&range=${encodeURIComponent(range)}&headers=${headers}&tqx=${encodeURIComponent(`responseHandler:${callbackName}`)}`;
+    document.head.appendChild(script);
+  });
+}
+
+function gvizCellValue(cell) {
+  if(!cell) return '';
+  if(cell.f!==undefined&&cell.f!==null) return cl(String(cell.f));
+  if(cell.v===undefined||cell.v===null) return '';
+  return cl(String(cell.v));
+}
+
 async function fetchTab(name) {
-  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
-  try { const r=await fetch(url); if(!r.ok) return []; return parseCSV(await r.text(), name); }
-  catch(e) { return []; }
+  try {
+    const [main,periodResult]=await Promise.all([
+      fetchGvizJsonp(name,'A2:Z',1),
+      fetchGvizJsonp(name,'A1:A1',0)
+    ]);
+    const meta=TABS[name], rows=[], seen=new Set();
+    const headers=(main.table&&main.table.cols||[]).map(c=>cl(c.label||c.id||''));
+    const required=['일자-No.','거래처명','금액합계(VAT포함)','진행상태'];
+    if(required.some(h=>!headers.includes(h))) throw new Error(`${name} 헤더를 찾을 수 없습니다: ${headers.join(', ')}`);
+    const periodText=gvizCellValue(periodResult.table&&periodResult.table.rows&&periodResult.table.rows[0]&&periodResult.table.rows[0].c[0]);
+    const periodMatch=periodText.match(/(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})\s*~\s*(\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})/);
+    const sourceStart=periodMatch?periodMatch[1].replace(/[.-]/g,'/'):'';
+    const sourceEnd=periodMatch?periodMatch[2].replace(/[.-]/g,'/'):'';
+    (main.table&&main.table.rows||[]).forEach(row=>{
+      const values=headers.map((_,i)=>gvizCellValue(row.c&&row.c[i]));
+      const obj={}; headers.forEach((h,i)=>{if(h)obj[h]=values[i];});
+      const d=obj['일자-No.']||'', co=obj['거래처명']||'';
+      if(!parseDate(d.split(' ')[0])||!co) return;
+      const fullRowKey=JSON.stringify(values);
+      if(seen.has(fullRowKey)) return;
+      seen.add(fullRowKey);
+      obj['금액합계(VAT포함)']=(obj['금액합계(VAT포함)']||'').replace(/[^0-9]/g,'');
+      obj._biz=meta.biz; obj._period=meta.period; obj._status=meta.status; obj._tab=name;
+      obj._sourceStart=sourceStart; obj._sourceEnd=sourceEnd;
+      rows.push(obj);
+    });
+    return rows;
+  } catch(e) {
+    console.error('[견적DB 로드 실패]',name,e);
+    return [];
+  }
 }
 
 function parseCSV(text, tabName) {
@@ -1280,16 +1336,9 @@ function csvLine(line){const r=[];let c='',q=false;for(const ch of line){if(ch==
 async function loadAll() {
   // 설정 탭에서 업데이트 일자 읽기
   try {
-    const cfgUrl=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent('설정')}`;
-    const cfgRes=await fetch(cfgUrl);
-    if(cfgRes.ok){
-      const cfgText=await cfgRes.text();
-      const firstLine=cfgText.split('\n')[0];
-      const val=firstLine.replace(/^"|"$/g,'').trim();
-      if(val){
-        document.getElementById('updateTimestamp').value=val;
-      }
-    }
+    const cfg=await fetchGvizJsonp('설정','A1:A1',0);
+    const val=gvizCellValue(cfg.table&&cfg.table.rows&&cfg.table.rows[0]&&cfg.table.rows[0].c[0]);
+    if(val) document.getElementById('updateTimestamp').value=val;
   } catch(e){}
 
   const res=await Promise.all(Object.keys(TABS).map(fetchTab));
