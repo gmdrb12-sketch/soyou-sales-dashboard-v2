@@ -625,6 +625,7 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
 .mode-rate-value.success { color:var(--green); }
 .mode-rate-value.fail { color:var(--red); }
 .mode-rate-sub { margin-top:5px; font-size:10px; color:var(--muted); }
+.mode-rate-amount { margin-top:4px; font-size:11px; font-weight:750; color:var(--text2); }
 .mode-card-foot { display:flex; justify-content:space-between; margin-top:11px; font-size:11px; color:var(--text2); }
 .mode-card-foot strong { color:var(--text); }
 .mode-compare-note { margin-top:10px; font-size:11px; color:var(--muted); line-height:1.5; }
@@ -658,6 +659,10 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
 .mode-detail-company { font-size:12px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .mode-detail-writer { font-size:11px; color:var(--text2); }
 .mode-detail-amount { font-size:11px; font-weight:700; text-align:right; }
+.equip-row { border-bottom:1px solid var(--divider); cursor:pointer; transition:background .15s; }
+.equip-row:hover { background:var(--surface2); }
+.equip-name-link { color:var(--text); font-weight:700; }
+.equip-name-link::after { content:'  상세보기 →'; color:var(--muted); font-size:10px; font-weight:600; }
 .mode-empty { padding:28px; text-align:center; color:var(--muted); }
 .mode-comparison-insight { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:12px 14px; margin-bottom:14px; color:var(--text2); line-height:1.6; }
 .mode-comparison-insight strong { color:var(--text); }
@@ -1104,6 +1109,19 @@ table.main-tbl tbody td { padding: 10px 12px; vertical-align: middle; }
   </div>
 </div>
 
+<!-- 설비 유형 상세 모달 -->
+<div class="big-overlay" id="equipOverlay" onclick="closeEquipOutside(event)">
+  <div class="big-modal">
+    <button class="big-modal-x" onclick="closeEquipModal()">✕</button>
+    <div class="big-modal-title" id="equipModalTitle">설비 유형 상세</div>
+    <div class="mode-detail-head">
+      <div class="mode-detail-title" id="equipModalSummary"></div>
+      <div class="mode-detail-count" id="equipModalCount"></div>
+    </div>
+    <div class="mode-detail-list" id="equipModalList"></div>
+  </div>
+</div>
+
 <script>
 const SHEET_ID = '1txgYztWESmoLcLWIv36dEIFX0xAe3RnpGln8zYcRtCM';
 const TABS = {
@@ -1458,6 +1476,8 @@ function getModeStats(data, mode) {
   const closed=success.length+fail.length;
   return {
     items, success, fail, pending, closed,
+    successAmt:success.reduce((sum,r)=>sum+(+r['금액합계(VAT포함)']||0),0),
+    failAmt:fail.reduce((sum,r)=>sum+(+r['금액합계(VAT포함)']||0),0),
     successRate:closed?Math.round(success.length/closed*100):0,
     failRate:closed?Math.round(fail.length/closed*100):0
   };
@@ -1485,13 +1505,14 @@ function getMonthlyModeStats(data) {
     while(d<=last&&keys.length<60){keys.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);d=new Date(d.getFullYear(),d.getMonth()+1,1);}
   }
   const map={};
-  keys.forEach(k=>map[k]={key:k,face:{success:0,fail:0},remote:{success:0,fail:0}});
+  keys.forEach(k=>map[k]={key:k,face:{success:0,fail:0,successAmt:0,failAmt:0},remote:{success:0,fail:0,successAmt:0,failAmt:0}});
   data.forEach(r=>{
     if(!['success','fail'].includes(r._status)) return;
     const mode=getSalesMode(r), key=monthKeyOf(r);
     if(!['face','remote'].includes(mode)||!key) return;
-    if(!map[key]) map[key]={key,face:{success:0,fail:0},remote:{success:0,fail:0}};
+    if(!map[key]) map[key]={key,face:{success:0,fail:0,successAmt:0,failAmt:0},remote:{success:0,fail:0,successAmt:0,failAmt:0}};
     map[key][mode][r._status]++;
+    map[key][mode][`${r._status}Amt`]+=(+r['금액합계(VAT포함)']||0);
   });
   return Object.values(map).sort((a,b)=>a.key.localeCompare(b.key));
 }
@@ -1504,8 +1525,8 @@ function renderModeCompare() {
   const card=(mode,label,icon,d)=>`<div class="mode-card ${mode}" onclick="openModeModal('${mode}','all')">
     <div class="mode-card-head"><div class="mode-card-title">${icon} ${label}</div><div class="mode-card-open">상세보기 →</div></div>
     <div class="mode-rate-row">
-      <div class="mode-rate-box"><div class="mode-rate-label">수주 성공률</div><div class="mode-rate-value success">${d.successRate}%</div><div class="mode-rate-sub">${d.success.length}/${d.closed}건</div></div>
-      <div class="mode-rate-box"><div class="mode-rate-label">수주 실패율</div><div class="mode-rate-value fail">${d.failRate}%</div><div class="mode-rate-sub">${d.fail.length}/${d.closed}건</div></div>
+      <div class="mode-rate-box"><div class="mode-rate-label">수주 성공률</div><div class="mode-rate-value success">${d.successRate}%</div><div class="mode-rate-sub">${d.success.length}/${d.closed}건</div><div class="mode-rate-amount">${fmtAmt(d.successAmt)}</div></div>
+      <div class="mode-rate-box"><div class="mode-rate-label">수주 실패율</div><div class="mode-rate-value fail">${d.failRate}%</div><div class="mode-rate-sub">${d.fail.length}/${d.closed}건</div><div class="mode-rate-amount">${fmtAmt(d.failAmt)}</div></div>
     </div>
     <div class="mode-card-foot"><span>결과 확정 <strong>${d.closed}건</strong></span><span>진행중 <strong>${d.pending.length}건</strong></span></div>
   </div>`;
@@ -1548,20 +1569,20 @@ function renderModeModal(){
 
   const active=(m,s)=>selectedModeDetail.mode===m&&selectedModeDetail.status===s?' active':'';
   document.getElementById('modeModalSummary').innerHTML=`
-    <div class="mode-modal-stat${active('face','success')}" onclick="selectModeDetail('face','success')"><div class="mode-modal-stat-label">대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${face.successRate}%</div><div class="mode-rate-sub">${face.success.length}/${face.closed}건</div></div>
-    <div class="mode-modal-stat${active('face','fail')}" onclick="selectModeDetail('face','fail')"><div class="mode-modal-stat-label">대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${face.failRate}%</div><div class="mode-rate-sub">${face.fail.length}/${face.closed}건</div></div>
-    <div class="mode-modal-stat${active('remote','success')}" onclick="selectModeDetail('remote','success')"><div class="mode-modal-stat-label">비대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${remote.successRate}%</div><div class="mode-rate-sub">${remote.success.length}/${remote.closed}건</div></div>
-    <div class="mode-modal-stat${active('remote','fail')}" onclick="selectModeDetail('remote','fail')"><div class="mode-modal-stat-label">비대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${remote.failRate}%</div><div class="mode-rate-sub">${remote.fail.length}/${remote.closed}건</div></div>`;
+    <div class="mode-modal-stat${active('face','success')}" onclick="selectModeDetail('face','success')"><div class="mode-modal-stat-label">대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${face.successRate}%</div><div class="mode-rate-sub">${face.success.length}/${face.closed}건</div><div class="mode-rate-amount">${fmtAmt(face.successAmt)}</div></div>
+    <div class="mode-modal-stat${active('face','fail')}" onclick="selectModeDetail('face','fail')"><div class="mode-modal-stat-label">대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${face.failRate}%</div><div class="mode-rate-sub">${face.fail.length}/${face.closed}건</div><div class="mode-rate-amount">${fmtAmt(face.failAmt)}</div></div>
+    <div class="mode-modal-stat${active('remote','success')}" onclick="selectModeDetail('remote','success')"><div class="mode-modal-stat-label">비대면 성공률</div><div class="mode-modal-stat-value" style="color:var(--green)">${remote.successRate}%</div><div class="mode-rate-sub">${remote.success.length}/${remote.closed}건</div><div class="mode-rate-amount">${fmtAmt(remote.successAmt)}</div></div>
+    <div class="mode-modal-stat${active('remote','fail')}" onclick="selectModeDetail('remote','fail')"><div class="mode-modal-stat-label">비대면 실패율</div><div class="mode-modal-stat-value" style="color:var(--red)">${remote.failRate}%</div><div class="mode-rate-sub">${remote.fail.length}/${remote.closed}건</div><div class="mode-rate-amount">${fmtAmt(remote.failAmt)}</div></div>`;
 
   document.getElementById('modePeriodLabel').textContent=`업로드 파일 기준 ${period.label}`;
   const monthly=getMonthlyModeStats(modeComparisonData);
-  const monthBtn=(m,mode,status,n)=>{
+  const monthBtn=(m,mode,status,n,amt)=>{
     const on=selectedModeDetail.month===m&&selectedModeDetail.mode===mode&&selectedModeDetail.status===status?' active':'';
-    return `<button class="month-count-btn ${status}${n?'':' zero'}${on}" onclick="selectModeMonthDetail('${m}','${mode}','${status}')">${n}건</button>`;
+    return `<button class="month-count-btn ${status}${n?'':' zero'}${on}" onclick="selectModeMonthDetail('${m}','${mode}','${status}')">${n}건<br><span style="font-size:9px">${fmtAmt(amt)}</span></button>`;
   };
   document.getElementById('modeMonthlyBody').innerHTML=monthly.length?monthly.map(x=>{
     const [y,m]=x.key.split('-');
-    return `<tr><td class="mode-month-label">${y}년 ${+m}월</td><td>${monthBtn(x.key,'face','success',x.face.success)}</td><td>${monthBtn(x.key,'face','fail',x.face.fail)}</td><td>${monthBtn(x.key,'remote','success',x.remote.success)}</td><td>${monthBtn(x.key,'remote','fail',x.remote.fail)}</td></tr>`;
+    return `<tr><td class="mode-month-label">${y}년 ${+m}월</td><td>${monthBtn(x.key,'face','success',x.face.success,x.face.successAmt)}</td><td>${monthBtn(x.key,'face','fail',x.face.fail,x.face.failAmt)}</td><td>${monthBtn(x.key,'remote','success',x.remote.success,x.remote.successAmt)}</td><td>${monthBtn(x.key,'remote','fail',x.remote.fail,x.remote.failAmt)}</td></tr>`;
   }).join(''):'<tr><td colspan="5" class="mode-empty">월별로 집계할 견적이 없습니다.</td></tr>';
 
   const mode=selectedModeDetail.mode, status=selectedModeDetail.status;
@@ -1660,10 +1681,12 @@ function renderWriter(){
 }
 
 // ── Equip ──
+let equipmentDetailTypes=[];
 function renderEquip(){
   const em={};
-  filtered.forEach(r=>{const k=getProdType(r);if(!em[k])em[k]={cnt:0,amt:0};em[k].cnt++;em[k].amt+=(+r['금액합계(VAT포함)']||0);});
+  filtered.forEach(r=>{const k=getProdType(r);if(!em[k])em[k]={cnt:0,amt:0,items:[]};em[k].cnt++;em[k].amt+=(+r['금액합계(VAT포함)']||0);em[k].items.push(r);});
   const arr=Object.entries(em).sort((a,b)=>b[1].amt-a[1].amt);
+  equipmentDetailTypes=arr.map(([name])=>name);
   const maxA=arr[0]?.[1].amt||1;
   document.getElementById('equipChart').innerHTML=arr.length===0
     ?'<div class="empty">데이터 없음</div>'
@@ -1674,14 +1697,31 @@ function renderEquip(){
           <th style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.5px;text-transform:uppercase;padding:6px 12px;text-align:right;border-bottom:1px solid var(--border)">금액</th>
           <th style="padding:6px 12px;border-bottom:1px solid var(--border);width:40%"></th>
         </tr></thead>
-        <tbody>${arr.map(([name,d],i)=>`<tr style="border-bottom:1px solid var(--divider)">
-          <td style="padding:9px 12px;font-weight:600;font-size:13px">${name}</td>
+        <tbody>${arr.map(([name,d],i)=>`<tr class="equip-row" onclick="openEquipModalByIndex(${i})">
+          <td class="equip-name-link" style="padding:9px 12px;font-size:13px">${safeText(name)}</td>
           <td style="padding:9px 12px;text-align:right;font-size:12px;color:var(--text2)">${d.cnt}건</td>
           <td style="padding:9px 12px;text-align:right;font-weight:700;font-size:13px">${fmtAmt(d.amt)}</td>
           <td style="padding:9px 12px"><div style="background:var(--surface3);border-radius:3px;height:5px;overflow:hidden"><div style="width:${Math.round(d.amt/maxA*100)}%;height:100%;background:${COLORS[i%COLORS.length]};border-radius:3px;transition:width 0.5s"></div></div></td>
         </tr>`).join('')}</tbody>
       </table>`;
 }
+
+function openEquipModalByIndex(index){openEquipModal(equipmentDetailTypes[index]);}
+function openEquipModal(type){
+  const rows=filtered.filter(r=>getProdType(r)===type);
+  const total=rows.reduce((sum,r)=>sum+(+r['금액합계(VAT포함)']||0),0);
+  document.getElementById('equipModalTitle').textContent=`⚙️ ${type} 상세 내역`;
+  document.getElementById('equipModalSummary').textContent=`총 ${fmtAmt(total)}`;
+  document.getElementById('equipModalCount').textContent=`${rows.length}건`;
+  document.getElementById('equipModalList').innerHTML=rows.length?rows.map(r=>{
+    const idx=allData.indexOf(r);
+    return `<div class="mode-detail-item" onclick="openEquipQuote(${idx})"><div class="mode-detail-no">${safeText(r['일자-No.'])}</div><div class="mode-detail-company">${safeText(r['거래처명'])}</div><div class="mode-detail-writer">${safeText(r['품목명(요약)']||r['견적명']||'-')}</div><div class="mode-detail-amount">${fmtAmt(+r['금액합계(VAT포함)']||0)}</div></div>`;
+  }).join(''):'<div class="mode-empty">해당하는 견적이 없습니다.</div>';
+  document.getElementById('equipOverlay').classList.add('on');
+}
+function openEquipQuote(idx){closeEquipModal();openModalByRow(idx);}
+function closeEquipModal(){document.getElementById('equipOverlay').classList.remove('on');}
+function closeEquipOutside(e){if(e.target===document.getElementById('equipOverlay'))closeEquipModal();}
 
 // ── Sort ──
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=1;}renderTable();}
