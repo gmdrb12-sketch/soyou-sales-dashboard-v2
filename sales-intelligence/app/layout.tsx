@@ -1,0 +1,1 @@
+import './globals.css';export const metadata={title:'SOYOU · 영업 인사이트',description:'소유티앤이 매출 상세 분석과 영업 관리'};export default function Layout({children}:{children:React.ReactNode}){return <html lang="ko"><body>{children}</body></html>}
